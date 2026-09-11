@@ -1,0 +1,1 @@
+A Python circuit simulator implementing modified nodal analysis for linear DC circuits and fixed-step RC transient analysis.
