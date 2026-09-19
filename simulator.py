@@ -60,11 +60,26 @@ def parse_netlist(text):
 
     return components
 
-netlist = """
-    V1 1 0 10
-    V2 1 2 1000
-    R2 vout 0 2000
-"""
+def build_node_map(components):
+    nodes = set()
+    for component in components:
+        if isinstance(component, Resistor):
+            nodes.add(component.node1)
+            nodes.add(component.node2)
+
+        elif isinstance(component, VoltageSource):
+            nodes.add(component.positive)
+            nodes.add(component.negative)
+
+        nodes.discard("0")
+
+    return {
+        node: index
+        for index, node in enumerate(sorted(nodes))
+    }
+
+            
+
 
 
 
@@ -78,6 +93,13 @@ def one_node_sim(resistance_ohms, current_amps):
 
  
 if __name__ == "__main__":
+
+    netlist = """
+    V1 1 0 10
+    R1 1 2 1000
+    R2 vout 0 2000
+"""
     components = parse_netlist(netlist)
-    for component in components:
-        print(component)
+    print(components)
+    node_map = build_node_map(components)
+    print(node_map)
