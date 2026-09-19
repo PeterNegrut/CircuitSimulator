@@ -79,9 +79,77 @@ def build_node_map(components):
     }
 
             
+def VoltageSource_Resistor_sim(components):
 
+    node_map = build_node_map(components)
 
+    num_nodes = len(node_map)
 
+    num_voltage_sources = sum(
+        isinstance(component, VoltageSource)
+        for component in components
+    )
+
+    matrix_size = num_nodes + num_voltage_sources
+
+    A = np.zeros((matrix_size, matrix_size))
+    b = np.zeros(matrix_size)
+
+    for component in components:
+
+        if isinstance(component, Resistor):
+
+            g = 1.0 / component.resistance
+
+            node1 = component.node1
+            node2 = component.node2
+
+            if node1 != "0":
+                i = node_map[node1]
+                A[i, i] += g
+
+            if node2 != "0":
+                j = node_map[node2]
+                A[j, j] += g
+
+            if node1 != "0" and node2 != "0":
+                i = node_map[node1]
+                j = node_map[node2]
+
+                A[i, j] -= g
+                A[j, i] -= g
+
+    voltage_source_number = 0
+
+    for component in components:
+
+        if isinstance(component, VoltageSource):
+
+            k = num_nodes + voltage_source_number
+            voltage_source_number += 1
+
+            if component.positive != "0":
+                p = node_map[component.positive]
+
+                A[p, k] += 1
+                A[k, p] += 1
+
+            if component.negative != "0":
+                n = node_map[component.negative]
+
+                A[n, k] -= 1
+                A[k, n] -= 1
+
+            b[k] += component.voltage
+
+    print("A:")
+    print(A)
+
+    print("b:")
+    print(b)
+    x = np.linalg.solve(A, b)
+    x = np.linalg.solve(A, b)
+    return [float(value) for value in x]
 
 def one_node_sim(resistance_ohms, current_amps):
     conductance = 1/resistance_ohms
@@ -101,5 +169,6 @@ if __name__ == "__main__":
 """
     components = parse_netlist(netlist)
     print(components)
-    node_map = build_node_map(components)
-    print(node_map)
+    x= VoltageSource_Resistor_sim(components)
+    print("x: ")
+    print(x)
