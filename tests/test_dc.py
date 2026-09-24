@@ -1,5 +1,8 @@
 import pytest
 from simulator import one_node_sim
+from simulator import VoltageSource_Resistor_sim
+from simulator import parse_netlist
+from simulator import build_node_map
 
 
 def test_one_milliamp_through_one_kilohm():
@@ -16,3 +19,32 @@ def test_0_milliamp_through_one_kiliohm():
     voltage = one_node_sim(1000, 0)
 
     assert voltage == pytest.approx(0.0)
+
+def test_voltage_divider():
+    netlist = """
+        V1 1 0 10
+        R1 1 2 1000
+        R2 2 0 2000
+    """
+    components = parse_netlist(netlist)
+    x = VoltageSource_Resistor_sim(components)
+    assert x[0] == pytest.approx(10.0)
+    assert x[1] == pytest.approx(6.666667)
+    assert x[2] == pytest.approx(-10/3000)
+
+def test_3_node():
+    netlist = """
+        V1 1 0 10
+        R1 1 2 1000
+        R2 2 0 2000
+        R3 2 3 1000
+        R4 3 0 2000
+    """
+
+    components = parse_netlist(netlist)
+    x = VoltageSource_Resistor_sim(components)
+
+    assert x[0] == pytest.approx(10.0)
+    assert x[1] == pytest.approx(60 / 11)       # 5.4545 V
+    assert x[2] == pytest.approx(40 / 11)       # 3.6364 V
+    assert x[3] == pytest.approx(-50 / 11000)   # -4.545 mA

@@ -165,7 +165,7 @@ if __name__ == "__main__":
     netlist = """
     V1 1 0 10
     R1 1 2 1000
-    R2 vout 0 2000
+    R2 2 0 2000
 """
     components = parse_netlist(netlist)
     print(components)
