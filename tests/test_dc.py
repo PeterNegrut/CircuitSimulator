@@ -48,3 +48,42 @@ def test_3_node():
     assert x[1] == pytest.approx(60 / 11)       # 5.4545 V
     assert x[2] == pytest.approx(40 / 11)       # 3.6364 V
     assert x[3] == pytest.approx(-50 / 11000)   # -4.545 mA
+
+def test_current_source_to_ground():
+    netlist = """
+        I1 0 1 0.01
+        R1 1 0 1000
+    """
+
+    components = parse_netlist(netlist)
+    x = VoltageSource_Resistor_sim(components)
+
+    assert x[0] == pytest.approx(10.0)
+
+def test_voltage_and_current_source():
+    netlist = """
+        V1 1 0 10
+        R1 1 2 1000
+        R2 2 0 1000
+        I1 2 0 0.002
+    """
+
+    components = parse_netlist(netlist)
+    x = VoltageSource_Resistor_sim(components)
+
+    assert x[0] == pytest.approx(10.0)      # V1
+    assert x[1] == pytest.approx(4.0)       # V2
+    assert x[2] == pytest.approx(-0.006)    # current through V1
+
+def test_current_source_between_nodes():
+    netlist = """
+        I1 1 2 0.001
+        R1 1 0 1000
+        R2 2 0 2000
+    """
+
+    components = parse_netlist(netlist)
+    x = VoltageSource_Resistor_sim(components)
+
+    assert x[0] == pytest.approx(-1.0)   # V1
+    assert x[1] == pytest.approx(2.0)    # V2

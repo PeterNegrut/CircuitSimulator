@@ -16,6 +16,13 @@ class VoltageSource:
     negative: str
     voltage: float
 
+@dataclass
+class CurrentSource:
+    name: str
+    positive: str
+    negative: str
+    current: float
+
 def parse_netlist(text):
     components = []
 
@@ -53,6 +60,10 @@ def parse_netlist(text):
                 VoltageSource(name, node1, node2, value)
             )
 
+        elif component_type == "I":
+            components.append(
+                CurrentSource(name, node1, node2, value)
+            )
         else:
             raise ValueError(
                 f"Line {line_number}: unknown component {name!r}"
@@ -68,6 +79,10 @@ def build_node_map(components):
             nodes.add(component.node2)
 
         elif isinstance(component, VoltageSource):
+            nodes.add(component.positive)
+            nodes.add(component.negative)
+
+        elif isinstance(component, CurrentSource):
             nodes.add(component.positive)
             nodes.add(component.negative)
 
@@ -142,6 +157,18 @@ def VoltageSource_Resistor_sim(components):
 
             b[k] += component.voltage
 
+    for component in components:
+
+        if isinstance(component, CurrentSource):
+
+            if component.positive != "0":
+                p = node_map[component.positive]
+                b[p] -= component.current
+
+            if component.negative != "0":
+                n = node_map[component.negative]
+                b[n] += component.current
+
     print("A:")
     print(A)
 
@@ -165,7 +192,8 @@ if __name__ == "__main__":
     netlist = """
     V1 1 0 10
     R1 1 2 1000
-    R2 2 0 2000
+    I1 2 0 0.01
+    R2 2 3 2000
 """
     components = parse_netlist(netlist)
     print(components)
