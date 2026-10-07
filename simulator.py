@@ -23,6 +23,22 @@ class CurrentSource:
     negative: str
     current: float
 
+@dataclass
+class Capacitor:
+    name: str
+    node1: str
+    node2: str
+    capacitance: float
+    voltage: float = 0.0  # voltage (node1 - node2) from the previous time step
+
+@dataclass
+class Inductor:
+    name: str
+    node1: str
+    node2: str
+    inductance: float
+    current: float = 0.0  # current (node1 -> node2) from the previous time step
+
 def parse_netlist(text):
     components = []
 
@@ -64,6 +80,14 @@ def parse_netlist(text):
             components.append(
                 CurrentSource(name, node1, node2, value)
             )
+        elif component_type == "C":
+            components.append(
+                Capacitor(name, node1, node2, value)
+            )
+        elif component_type == "L":
+            components.append(
+                Inductor(name, node1, node2, value)
+            )
         else:
             raise ValueError(
                 f"Line {line_number}: unknown component {name!r}"
@@ -86,6 +110,10 @@ def build_node_map(components):
             nodes.add(component.positive)
             nodes.add(component.negative)
 
+        elif isinstance(component, (Capacitor, Inductor)):
+            nodes.add(component.node1)
+            nodes.add(component.node2)
+
         nodes.discard("0")
 
     return {
@@ -93,8 +121,30 @@ def build_node_map(components):
         for index, node in enumerate(sorted(nodes))
     }
 
-            
-def VoltageSource_Resistor_sim(components):
+def _stamp_conductance(A, node_map, node1, node2, conductance):
+    if node1 != "0":
+        i = node_map[node1]
+        A[i, i] += conductance
+
+    if node2 != "0":
+        j = node_map[node2]
+        A[j, j] += conductance
+
+    if node1 != "0" and node2 != "0":
+        i = node_map[node1]
+        j = node_map[node2]
+
+        A[i, j] -= conductance
+        A[j, i] -= conductance
+
+def _stamp_current_source(b, node_map, positive, negative, current):
+    if positive != "0":
+        b[node_map[positive]] -= current
+
+    if negative != "0":
+        b[node_map[negative]] += current
+
+def VoltageSource_Resistor_sim(components, dt=None):
 
     node_map = build_node_map(components)
 
@@ -104,6 +154,16 @@ def VoltageSource_Resistor_sim(components):
         isinstance(component, VoltageSource)
         for component in components
     )
+
+    has_dynamic_component = any(
+        isinstance(component, (Capacitor, Inductor))
+        for component in components
+    )
+
+    if has_dynamic_component and dt is None:
+        raise ValueError(
+            "dt must be provided to simulate capacitors or inductors"
+        )
 
     matrix_size = num_nodes + num_voltage_sources
 
@@ -115,24 +175,39 @@ def VoltageSource_Resistor_sim(components):
         if isinstance(component, Resistor):
 
             g = 1.0 / component.resistance
+            _stamp_conductance(A, node_map, component.node1, component.node2, g)
 
-            node1 = component.node1
-            node2 = component.node2
+        elif isinstance(component, Capacitor):
 
-            if node1 != "0":
-                i = node_map[node1]
-                A[i, i] += g
+            # Backward Euler companion model: a conductance C/dt in
+            # parallel with a current source that carries the previous
+            # time step's voltage forward.
+            g = component.capacitance / dt
+            _stamp_conductance(A, node_map, component.node1, component.node2, g)
 
-            if node2 != "0":
-                j = node_map[node2]
-                A[j, j] += g
+        elif isinstance(component, Inductor):
 
-            if node1 != "0" and node2 != "0":
-                i = node_map[node1]
-                j = node_map[node2]
+            # Backward Euler companion model: a conductance dt/L in
+            # parallel with a current source that carries the previous
+            # time step's current forward.
+            g = dt / component.inductance
+            _stamp_conductance(A, node_map, component.node1, component.node2, g)
 
-                A[i, j] -= g
-                A[j, i] -= g
+    for component in components:
+
+        if isinstance(component, Capacitor):
+
+            g = component.capacitance / dt
+            history_current = g * component.voltage
+            _stamp_current_source(
+                b, node_map, component.node2, component.node1, history_current
+            )
+
+        elif isinstance(component, Inductor):
+
+            _stamp_current_source(
+                b, node_map, component.node1, component.node2, component.current
+            )
 
     voltage_source_number = 0
 
@@ -175,8 +250,31 @@ def VoltageSource_Resistor_sim(components):
     print("b:")
     print(b)
     x = np.linalg.solve(A, b)
-    x = np.linalg.solve(A, b)
     return [float(value) for value in x]
+
+def backward_euler_sim(components, dt, steps):
+    node_map = build_node_map(components)
+    results = []
+
+    for _ in range(steps):
+        x = VoltageSource_Resistor_sim(components, dt)
+
+        for component in components:
+
+            if isinstance(component, Capacitor):
+                v1 = x[node_map[component.node1]] if component.node1 != "0" else 0.0
+                v2 = x[node_map[component.node2]] if component.node2 != "0" else 0.0
+                component.voltage = v1 - v2
+
+            elif isinstance(component, Inductor):
+                v1 = x[node_map[component.node1]] if component.node1 != "0" else 0.0
+                v2 = x[node_map[component.node2]] if component.node2 != "0" else 0.0
+                g = dt / component.inductance
+                component.current += g * (v1 - v2)
+
+        results.append(x)
+
+    return results
 
 def one_node_sim(resistance_ohms, current_amps):
     conductance = 1/resistance_ohms
